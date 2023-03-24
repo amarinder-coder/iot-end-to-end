@@ -11,9 +11,9 @@ Part2: Storing all the data in long-term storage for the cold path.
 We are fetching data from iot hub and  transforming the data into a proper table via ADB dumping it in a storage account.
 
 
-Part3: We are performing anamoly detection in real-time.
-We are fetching data from iot hub and performing anamoly detection via Stream Analytics Query. Pushing data into a event hub which connects to a azure function.
-This Azure Function  
+Part3: We are performing anamoly detection in real-time and creating a email alert.
+We are fetching data from iot hub and performing anamoly detection (using SpikeAndDip) via Stream Analytics Query. Pushing data into a event hub which sends data directly to a azure function.
+This Azure Function triggers logic app to get the payload of trigger and send an email to user with id time and temp from the message body. 
 
 
 We will be using :
