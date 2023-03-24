@@ -1,7 +1,20 @@
 # iot-end-to-end
 
 
-This is an end-to-end IoT solution simulating high velocity data emitted from smart meters and analyzed in Azure. We will design an architecture, filtering a subset of the telemetry data for real-time visualization on the hot path, and storing all the data in long-term storage for the cold path.
+This is an end-to-end IoT solution simulating high velocity data emitted from smart meters and analyzed in Azure. 
+this project is divided into 3 parts:
+
+Part1: We will design an architecture, filtering a subset of the telemetry data for real-time visualization on the hot path.
+We are fetching data from iot hub and seeing the average of temp in last 5 mins as a real-time report in powerbi.
+
+Part2: Storing all the data in long-term storage for the cold path.
+We are fetching data from iot hub and  transforming the data into a proper table via ADB dumping it in a storage account.
+
+
+Part3: We are performing anamoly detection in real-time.
+We are fetching data from iot hub and performing anamoly detection via Stream Analytics Query. Pushing data into a event hub which connects to a azure function.
+This Azure Function  
+
 
 We will be using :
 
@@ -97,7 +110,8 @@ Steps for powerbi:
 Storing data in long-term storage for the cold path.
 
 
-Step8: Create a storage account. Create another stream analytics job. Repeat the above step, make an input from iothub and a output to the storage account.
+Step8: Create a storage account. Create another stream analytics job. Repeat the above step, make an input from iothub and a output to the storage account
+(choose CSV as serialization format).
 
 ![image](https://user-images.githubusercontent.com/66850958/227403424-c080157d-1c47-4e21-b0f4-aa9fa39664c8.png)
 
@@ -106,6 +120,75 @@ Successful output in blob storage with proper folder format.
 
 
 ![image](https://user-images.githubusercontent.com/66850958/227403849-7102b40d-3366-4540-9fca-8401f36213fc.png)
+
+
+Step9: Create a notebook (mytranspy.ipynb) in databricks workspace, transforming file into a useful table and loading it as a table.
+
+
+![image](https://user-images.githubusercontent.com/66850958/227419796-77ed3935-3c53-4860-9588-80733e68a243.png)
+
+
+
+For anamoly detection, send a mail to user if a anamoly is detected.
+
+
+Step10: Create a event hub namespace, then a event hub. Create a new stream analytics job, input will be iothub and output will be this event hub.
+
+![image](https://user-images.githubusercontent.com/66850958/227428941-9cd43e56-ce44-4c32-b7e1-b3f9cfaa31ff.png)
+
+
+SQL Query to analyse anamoly:
+WITH SmootheningStep AS
+(
+    SELECT
+        System.Timestamp() as time, id,
+        AVG(CAST(temperature as float)) as temp
+    FROM myiot
+    GROUP BY TUMBLINGWINDOW(second, 30),id
+),
+AnomalyDetectionStep AS
+(
+    SELECT
+    time,
+    temp,id,
+    AnomalyDetection_SpikeAndDip(temp, 100, 120, 'spikesanddips') 
+        OVER(PARTITION BY id LIMIT DURATION(second, 120)) as SpikeAndDipScores
+    FROM SmootheningStep
+), AnamolyDetectionFinal as (
+SELECT
+    time,
+    temp,id,
+    CAST(GetRecordPropertyValue(SpikeAndDipScores, 'Score') AS FLOAT) As
+    SpikeAndDipScore,
+    CAST(GetRecordPropertyValue(SpikeAndDipScores, 'IsAnomaly') AS BIGINT) AS
+    IsSpikeAndDipAnomaly
+FROM AnomalyDetectionStep )
+select id,time,
+    temp, SpikeAndDipScore, IsSpikeAndDipAnomaly into huboutput
+    from AnamolyDetectionFinal where IsSpikeAndDipAnomaly=0
+
+
+Step11: Create a function app with a event hub trigger. Go to integration and change the input from above event hub.
+
+![image](https://user-images.githubusercontent.com/66850958/227429186-9a48799f-b523-4d78-b4f1-8f5b1d14bc65.png)
+
+
+![image](https://user-images.githubusercontent.com/66850958/227429488-b9ed529e-4ae5-441e-9c02-1e31a578d434.png)
+
+
+Step11: Create a logic app to send an email in case an anamoly is generated.
+
+
+![image](https://user-images.githubusercontent.com/66850958/227430912-a75a6ee6-b757-449a-a5e7-b1b2f6a786cb.png)
+
+
+Step12: We get a successful email about the anamoly detection.
+
+
+![image](https://user-images.githubusercontent.com/66850958/227431161-68ee8a55-3a94-40b3-9e27-783fabbb9def.png)
+
+
+
 
 
 
